@@ -1,0 +1,66 @@
+# Set Working Directory and Read Data
+setwd("F:/5- PAN CAncer/ACTL6A/13 sc")
+gene_expression_data = read.csv("TISCH_ACTL6A_heatmap.csv", header = TRUE, sep = ",")
+
+# Load Required Libraries
+library(tidyverse)
+library(pheatmap)
+
+# Data Processing: Filter out NA values
+filtered_data <- gene_expression_data %>% filter(!is.na(log.TPM.10.1.))
+
+# Data Aggregation for Heatmap
+result <- filtered_data %>%
+  group_by(CellType, Dataset) %>%
+  summarize(mean_log_TPM = mean(log.TPM.10.1.)) %>%
+  separate(Dataset, into = c("TumorType", "Dataset"), sep = "_") %>%
+  select(CellType, TumorType, mean_log_TPM)
+
+# Further Data Aggregation for Bar Plot
+result2 <- result %>%
+  group_by(CellType, TumorType) %>%
+  summarise(mean_log_TPM = mean(mean_log_TPM))
+
+# Prepare Data for Heatmap
+heatmap_data <- spread(result2, key = TumorType, value = mean_log_TPM) %>%
+  column_to_rownames(var = "CellType") %>%
+  as.matrix()
+
+# Fill NA Values in Heatmap Data
+nrows <- nrow(heatmap_data)
+ncols <- ncol(heatmap_data)
+
+for (i in 1:nrows) {
+  for (j in 1:ncols) {
+    if (is.na(heatmap_data[i, j])) {
+      heatmap_data[i, j] = 0
+    }
+  }
+}
+
+# Define Custom Color Scale
+my_color_scale <- colorRampPalette(c("lightblue", "darkblue"))(50)
+
+# Create the Heatmap
+pheatmap(
+  heatmap_data,
+  clustering_method = "complete",
+  main = "Heatmap of Single-Cell Pan-Cancer for ACTL6A",
+  fontsize_row = 8,
+  fontsize_col = 8,
+  color = my_color_scale,
+  cluster_cols = FALSE
+)
+
+# Data Preparation for Bar Plot
+data <- result2 %>%
+  group_by(CellType) %>%
+  summarise(mean_logTPM = mean(mean_log_TPM, na.rm = FALSE))
+
+# Create Bar Plot
+ggplot(data, aes(x = reorder(CellType, -mean_logTPM), y = mean_logTPM, fill = mean_logTPM)) +
+  geom_bar(stat = 'identity') +
+  scale_fill_viridis() +
+  labs(x = 'Cell Type', y = 'ACTL6A Gene Expression', title = 'ACTL6A Gene Expression in Different Cell Types') +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"))
